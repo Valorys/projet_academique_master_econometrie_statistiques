@@ -1,0 +1,40 @@
+h1, h5{ font-weight: 400; }
+
+
+h2, .h2 {
+    font-weight: bold;
+    color: #000;
+}
+
+
+h3, .h3 {
+    font-size: 24px;
+    background-position: left;
+    background-color: #034F3B;
+    color: #FFF;
+    padding: 15px;
+    font-family: 'Futura', 'Tw Cen MT', 'Helvetica Neue', Helvetica;
+    text-transform: uppercase;
+    text-align: center;
+}
+
+footer {
+  background-color: #f8f8f8;
+  height: 100px;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  font-size: 14px;
+}
+.footer img {
+  margin: 0 20px;
+  height: 50px;
+}
+.footer a {
+  color: #333;
+  text-decoration: none;
+}
+.footer a:hover {
+  text-decoration: underline;
+}

@@ -1,0 +1,639 @@
+---
+title: "Biostatistiques - Les ormeaux"
+author: "Valorys TRILLAUD et Marie K."
+date : "2024-02-11"
+format:
+  pdf :
+    code-fold: true
+    warning: false
+toc: true
+toc-placement: top
+toc-title: "Sommaire"
+---
+
+{{< pagebreak >}}
+
+# 1. Les librairies
+
+```{r}
+
+library(readxl)
+library(naniar)
+library(writexl)
+library(mice)
+library(tidyverse)
+library(FactoMineR)
+library(missMDA)
+library(ggplot2)
+library(tinytex)
+library(knitr)
+```
+
+# 2. Présentation du sujet
+
+Dans le cadre de ce projet, nous souhaitions travailler sur des données ayant trait à la biologie. Sur UC Irvine, nous avions la possibilité de filtrer les bases de données présentes sur leur thème, aussi c'est celui de la biologie que nous avons retenu. Parmi les propositions qui ressortaient, nous avons sélectionner un jeu de données dont le sujet est celui des ormeaux. Il provient d'une étude de la division des ressources marines de Tasmanie en Australie.
+
+```{r}
+abalone <- read_excel("Abalone.xlsx")
+```
+
+Concrètement, il s'agit d'un jeu de données de 4 177 lignes, représentant chacune un individu, en l'occurrence un ormeau ; et de 9 variables présentant leurs caractéristiques.
+
+```{r}
+dim(abalone)
+```
+
+Nous allons à présent introduire les différentes variables qui composent notre jeu de données. La première est le sexe des ormeaux, elle peut prendre 3 modalités : femelle (F), mâle (M) et nourrisson (I). Les trois variables suivantes sont des mesures en cm des longueurs, diamètre et hauteur des individus. Viennent ensuite des poids en g, celui des ormeaux entier, puis des individus écaillés, de leurs viscères et de leur coquille. Enfin notre dernière variable compte les anneaux visibles sur les ormeaux, il s'agit d'une mesure de leur âge.
+
+```{r}
+colnames(abalone)
+```
+
+# 3. Suppression aléatoire de 100 valeurs
+
+Initialement, notre jeu de données étant complet, nous avons dû en premier lieu procéder à la suppression de cellules. Nous avons choisi d'en supprimer 100 de façon aléatoire. Pour cela, nous avons créé 2 échantillons de longueur 100. Le premier prend ses valeurs parmi les numéros de lignes de nos données, tandis que dans le second, on retrouve aléatoirement des numéro de colonnes associées à nos variables quantitatives. Nous avons ensuite remplacé les valeurs des cellules obtenues en croisant les deux échantillons par NA. Cela nous a donné un nouveau fichier : abalone_bis que nous avons enregistré afin de ne plus modifier le fichier d'origine par la suite et d'uniquement faire appel à ce nouveau fichier excel.
+
+```{r}
+#| echo: TRUE
+#| eval: FALSE
+
+nb_suppr <- 100
+
+indices_lignes <- sample(nrow(abalone),nb_suppr, replace = TRUE)
+indices_col <- sample(2:ncol(abalone), nb_suppr, replace = TRUE)
+
+abalone_bis <- abalone
+
+for (i in 1:nb_suppr){
+  abalone_bis[indices_lignes[i],indices_col[i]] <- NA
+}
+
+write_xlsx(x= abalone_bis, 'Abalone_bis.xlsx')
+
+indices_col
+#  2 9 8 9 7 4 4 2 4 2 8 3 3 7 8 2 2 8 3 4 9 4 6 6 9 8 5 8 3 6 8 7 5 6 6 9 5
+# 3 6 5 8 8 2 7 9 2 7 4 2 2 2 9 6 8 4 3 4 3 9 7 8 9 4 4 6 4 5 3 7 3 6 6 3 4 
+# 3 3 3 7 8 8 6 8 2 9 4 9 8 2 5 9 7 5 3 2 7 3 4 9 7 7
+indices_lignes
+# 2411 3225 4162 1529  134 3204 3143 1979 3050 3137 1390 3169  642 2584  628
+# 581 4064 3968 3665  289 2112  785 1989 3782 4050 1913 3505 4146 2997 2516 
+# 759 2979  140 3332 1224  859  767 1384 1597 1586 2063 4081 3704  936 3576 
+# 2521 2094 4117 1617 2445 3982 4088 4172  716  129 3109 1043 3962 1157 1576
+# 1746 2587  126 1507 1041 2342 1694  618  882 3224 1199 3069 1890 3380 3479 
+# 2220 2544 1149   24 2963 2733  299 2498 1181 2657  469 3230 1706 1145  961
+# 1756  706 2927 2979 1116 2423  783 4039  930 3320
+
+```
+
+# 4. Lecture du jeu de données et observations des valeurs manquantes
+
+A présent, nous ouvrons le nouveau fichier, celui comprenant des valeurs manquantes. En ayant analysé la structure de notre jeu de données, nous nous sommes aperçues que la variable sexe était au format chaine de caractère, aussi il a été nécessaire de la factoriser. Quant aux autres variables, elles étaient déjà au format souhaité, celui numérique.
+
+```{r}
+abalone_bis <- read_excel("Abalone_bis.xlsx")
+str(abalone_bis)
+abalone_bis$Sexe <- as.factor(abalone_bis$Sexe)
+```
+
+Nous souhaitions ensuite nous rendre compte des valeurs manquantes créées. Pour cela, nous les avons visualisées de différentes manières. Ainsi, nous avons appris que des valeurs manquantes étaient présentes dans l'ensemble de nos variables quantitatives. Si pour la majorité des individus concernés, une unique valeur manquante est détectée, on observe en revanche que pour un ormeau, il manque à la fois la valeur du poids de ses viscères et de sa longueur. Par ailleurs, chacun de nos individus est unique.
+
+```{r}
+#| fig-cap: Représentation des valeurs manquantes (naniar)
+naniar::gg_miss_upset(abalone_bis, nsets = 8)
+
+```
+
+```{r}
+#| fig-cap: Représentation des valeurs manquantes (mice)
+#| results: hide
+md.pattern(abalone_bis, rotate.names = TRUE)
+
+```
+
+```{r}
+abalone_bis |> 
+  distinct() |> 
+  nrow()
+```
+
+# 5. Les statistiques descriptives
+
+Nous allons commencer notre étude en réalisant les statistiques descriptives de notre jeu de données.
+
+## A. Statistiques univariées
+
+### 1) Variable qualitative
+
+En premier lieu, nous souhaitions nous rendre compte de la répartition des ormeaux selon leur sexe.
+
+```{r}
+#| tbl-cap: Répartition des individus selon leur genre (tb de contingence)
+kable(count(abalone_bis, Sexe))
+```
+
+```{r}
+#| fig-cap: Répartition des individus selon leur genre (diagramme en barres)
+abalone_bis |>
+ggplot() +
+aes(x = Sexe, fill = Sexe) +
+geom_bar() +
+theme_classic()
+```
+
+Les individus étudiés sont répartis de façon presque similaire entre les 3 genres, toutefois il y a légèrement plus de mâles que de femelles et de nourissons.
+
+### 2) Variables quantitatives
+
+#### a) Statistiques quantitatives initiales
+
+En second lieu, nous souhaitons connaitre la dispersion de nos variables quantitatives. Pour cela, nous avons calculé les valeurs de statistiques telles que la moyenne, la médiane ou encore les quartiles 1 et 3. De plus, pour nous assurer que le jeu de données ne contient pas de valeurs aberrantes nous réalisons des boxplots ainsi que des histogrammes. Ces derniers nous permettront une meilleure visualisation de la distribution des données.
+
+```{r}
+#| tbl-cap: Dispersion des variables quantitatives
+
+summary(abalone_bis[,c(2:9)])
+```
+
+```{r}
+#| fig-cap: Dispersion des variables quantitatives (boxplots)
+
+abalone_bis |>
+pivot_longer(
+cols = where(is.numeric)
+) |>
+ggplot() +
+aes(x = value) +
+facet_wrap(~ name, scales = "free_x") +
+geom_boxplot() +
+theme_light()
+
+```
+
+```{r}
+#| fig-cap: Dispersion des variables quantitatives (histogramme)
+
+abalone_bis |>
+pivot_longer(
+cols = where(is.numeric)
+) |>
+ggplot() +
+aes(x = value) +
+facet_wrap(~ name, scales = "free_x") +
+geom_histogram(bins=15) +
+theme_light()
+
+```
+
+Dans un premier temps, nous remarquons que la variable hauteur a un minimum de 0, ce qui nous parait être anormal car une hauteur de 0 cm n'est pas possible. Après vérification, il y a deux individus concernés et leurs autres caractéristiques semblent cohérentes. Nous considérons donc que ce sont 2 valeurs aberrantes dûes à une erreur lors de la saisie.
+
+En ce qui concerne les boxplots, nous pouvons remarquer que pour la hauteur, il y a 2 points très élevés et éloignés du reste des observations. Le plus grand atteint une hauteur de 11,3 cm alors que la moyenne est de 1,4 cm. En vérifiant les individus et les caractéristiques possibles des ormeaux, nous considérons ces valeurs comme aberrantes.
+
+Par ailleurs, les valeurs prises par les ormeaux étudiés dans les autres variables semblent être en adéquation avec les valeurs que l'on aurait pu attendre, aussi nous ne considérons pas qu'il existe d'autres valeurs aberrantes.
+
+Grâce à cette analyse, nous avons donc trouvé 4 valeurs aberrantes liées à la hauteur. Nous décidons de les traiter comme des valeurs manquantes et de leur attribuer NA comme valeur.
+
+```{r}
+#| fig-cap: Représentation des valeurs manquantes après transformation des valeurs aberrantes
+#| results: hide
+
+abalone_bis <- abalone_bis |> 
+  mutate(Hauteur = ifelse(Hauteur > 5, NA, Hauteur)) |> 
+  mutate(Hauteur = ifelse(Hauteur == 0, NA, Hauteur)) 
+
+md.pattern(abalone_bis, rotate.names = TRUE)
+  
+```
+
+Nous allons maintenant recommencer ces statistiques quantitatives sans les valeurs aberrantes que nous venons de supprimer.
+
+#### b) Statistiques quantitatives sans les valeurs aberrantes
+
+```{r}
+#| tbl-cap: Dispersion des variables sans les valeurs aberrantes
+
+summary(abalone_bis[,c(2:9)])
+```
+
+```{r}
+#| fig-cap: Dispersion des variables (boxplots) sans les valeurs aberrantes
+
+abalone_bis |>
+pivot_longer(
+cols = where(is.numeric)
+) |>
+ggplot() +
+aes(x = value) +
+facet_wrap(~ name, scales = "free_x") +
+geom_boxplot() +
+theme_light()
+
+```
+
+```{r}
+#| fig-cap: Dispersion des variables quantitatives sans les valeurs aberrantes (histogramme)
+
+abalone_bis |>
+pivot_longer(
+cols = where(is.numeric)
+) |>
+ggplot() +
+aes(x = value) +
+facet_wrap(~ name, scales = "free_x") +
+geom_histogram(bins=15) +
+theme_light()
+
+```
+
+Attribuer NA aux valeurs aberrantes nous a donc permis d'obtenir une dispersion des valeurs de hauteur plus cohérente. Désormais les ormeaux étudiés ont une longueur comprise entre 0,1 et 2,5 cm. Hormis cette variation, les observtions de cette nouvelle série de statistiques sont similaires à celles précédemment réalisées. Nous pouvons donc poursuivre notre analyse en s'intéressant cette fois ci aux variations concernant simultanément plusieurs de nos variables.
+
+## B. Analyse bivariée
+
+### 1) Analyse quanti-quali
+
+Nous allons à présent représenter graphiquement la distribution du sexe des individus en fonction de leurs différentes caractéristiques à l'aide d'histogrammes et de boxplots.
+
+```{r}
+#| fig-cap: Dispersion des variables quantitatives selon le sexe (histogramme)
+
+
+abalone_bis |>
+pivot_longer(
+cols = where(is.numeric)
+) |>
+ggplot() +
+aes(x = value, fill = Sexe) +
+facet_wrap(~ name, scales = "free_x") +
+geom_histogram(bins=15) +
+theme_light()
+
+```
+
+```{r}
+#| fig-cap: Dispersion des variables quantitatives selon le sexe (boxplot)
+
+abalone_bis |>
+pivot_longer(
+cols = Longueur:Anneaux,
+names_to = "mesure",
+values_to = "valeur"
+) |>
+ggplot() +
+aes(y = valeur, x = Sexe, color = Sexe) +
+geom_boxplot() +
+geom_jitter(alpha = 0.3) +
+facet_wrap(~ mesure, scales = "free_y") +
+theme_bw()
+```
+
+Ces deux méthodes nous révèlent que les nourissons (I) présentent des mesures de leurs caractéristiques qui sont globalement inférieures à celles des mâles et des femelles. De plus, si les modalités observées pour les femelles et les mâles semblent proches, il existe toutefois, une différence très subtile entre ces deux genres. À titre d'exemple, on constate que les mâles sont plus nombreux à afficher un poids entier ou un poids écaillé plus élevé.
+
+### 2) Analyse quanti-quanti
+
+L'analyse bivariée quantitative nous permet de mieux comprendre les relations entre deux variables quantitatives en utilisant la matrice de corrélation ainsi que les nuages de points.
+
+```{r}
+#| fig-cap: Matrice de corrélation des variables quantitatives
+
+abalone_bis |>
+select(Longueur:Anneaux) |>
+drop_na() |>
+cor() |>
+corrplot::corrplot.mixed()
+
+```
+
+La matrice de corrélation offre une visualisation révélatrice, mettant en évidence une relation très forte et positive entre toutes les variables examinées. Toutefois, il est essentiel de noter que les liens entre les anneaux et les autres variables sont moins marqués. Cela se traduit par des coefficients de corrélation liés à cette variable relativement plus faibles.
+
+```{r}
+#| fig-width: 15
+#| fig-height: 15
+#| fig-cap: Nuage de point des variables quantitatives
+
+abalone_bis |> 
+  select(-Sexe) |> 
+  plot()
+
+```
+
+Les nuages de points révèlent clairement une forte relation croissante entre nos variables. Par exemple, une relation linéaire positive est observée entre la longueur et le diamètre, ainsi qu'entre le poids entier et le poids écaillé. Par ailleurs, la relation entre le diamètre et le poids de la coquille semble suivre une tendance exponentielle.
+
+Nous allons maintenant procéder au remplacement des valeurs manquantes.
+
+# 6. Remplacements
+
+## A. Première méthode : remplacement grâce à la moyenne
+
+Le premier remplacement concerne la variable longueur. Nous avons opté pour une méthode de remplacement par la moyenne pour les valeurs manquantes.
+
+Avant d'appliquer cette méthode, nous avons préalablement évalué sa pertinence en utilisant un boxplot.
+
+```{r}
+#| fig-cap: Dispersion de la longueur (boxplot)
+
+abalone_bis|>
+  ggplot() +
+  aes(x = Longueur) +
+  geom_boxplot() +
+  theme_classic()
+
+```
+
+On observe la présence de valeurs extrêmes basses, cependant, étant donné leur nombre limité et leur proximité avec la boxplot, le remplacement par la moyenne semble être une approche cohérente. De plus, nous avons pensé que l'âge de l'ormeaux pouvait exercer une influence sur la longueur de la coquille. Pour confirmer ou infirmer l'existence d'un tel lien, nous avons réalisé un nuage de points entre ces deux variables.
+
+```{r}
+#| fig-cap: Dispersion de la longueur selon le nombre d'anneaux
+
+abalone_bis|>
+  ggplot() +
+  aes(x =Anneaux, y = Longueur ) +
+  geom_point() +
+  theme_classic()
+
+```
+
+Ce graphique confirme notre hypothèse. Par conséquent, nous allons calculer une moyenne de la longueur par anneau. Cette approche offre une meilleure approximation de la moyenne en tenant compte du groupe d'âge des ormeaux. Une fois ces moyennes obtenues, nous avons procédé au remplacement des valeurs manquantes de la variable longueur.
+
+Par la suite, nous avons effectué le remplacement des valeurs manquantes et vérifié qu'elles ont été correctement substituées.
+
+```{r}
+
+valeur_remplacement <- abalone_bis |> 
+  group_by(Anneaux) |> 
+  summarize(moyenne_long = mean(Longueur, na.rm = TRUE)) |> 
+  ungroup()
+
+abalone_bis_2 <- abalone_bis |> 
+  left_join(valeur_remplacement, by = "Anneaux") |> 
+  mutate(Longueur = ifelse(is.na(Longueur), moyenne_long, Longueur)) |> 
+  select(-moyenne_long)
+
+```
+
+```{r}
+#| fig-cap: Représentation des valeurs manquantes après le premier remplacement
+#| results: hide
+
+md.pattern(abalone_bis_2, rotate.names = TRUE)
+```
+
+Nos données ont bien été remplacées.
+
+Notre base de données provient d'un jeu complet auquel nous avons supprimé des valeurs. Aussi, nous pouvons maintenant comparer les résultats obtenus avec les résultats réels. Cette démarche nous permet de vérifier la qualité de nos remplacements, bien que dans la réalité, cette comparaison ne soit pas réalisable.
+
+```{r}
+#| tbl-cap: Comparaison des valeurs obtenues avant et après le premier remplacement
+
+individus_manquants <- data.frame(which(is.na(abalone_bis), arr.ind = TRUE))
+
+individus_manquants_longueur <- individus_manquants |> 
+  filter (col==2) |> 
+  rowwise() |>
+  mutate(
+    origine = sum(round(abalone[row, col], 2)),
+    remplacement = sum(round(abalone_bis_2[row, col], 2)),
+    différence = round(remplacement - origine,2),
+    différence_en_pourcentage = round((remplacement - origine)/origine * 100,0),
+    col = colnames(abalone[,col]))
+ 
+kable(individus_manquants_longueur)
+```
+
+Nous pouvons maintenant comparer les valeurs d'origine avec celles de remplacement. Les différences de longueur varient de 0,08 à 1,11 centimètre, ce qui indique la cohérence de notre méthode de remplacement. Pour plus de précision, nous avons calculé le pourcentage d'erreur et constaté des écarts de 1 à 17 % (positifs et négatifs). Cependant, il est important de noter que ces pourcentages sont influencés par la faible amplitude de nos valeurs. Un écart de 0,84 centimètres par rapport à la valeur réelle peut ainsi générer une différence de 17%. En conclusion, les différences entre les valeurs d'origine et les valeurs de remplacement restent modestes, et le remplacement par la moyenne se révèle efficace pour notre variable "longueur".
+
+## B. Deuxième méthode : remplacement grâce à la régression linéaire
+
+Concernant le second remplacement utilisé, il a été permis grâce à des régressions linéaires multiples. En effet, parmi nos variables, 4 sont des poids et il existe une relation entre eux. Il est important de préciser que le poids entier n'est pas exactement la somme des trois autres poids bien qu'il en soit proche. Aussi, nous avons choisi d'effectuer des régressions de chacun de ces 4 poids selon les 3 autres.
+
+-   Régression du poids entier
+
+```{r}
+
+Poids_entier_estimé <- lm(Poids_entier ~ Poids_écaillé + Poids_viscères +
+                            Poids_coquille, data = abalone_bis_2)
+
+summary(Poids_entier_estimé)
+
+cellules_vides_poids_entier <- which(is.na(abalone_bis_2$Poids_entier))
+
+abalone_bis_2$Poids_entier[cellules_vides_poids_entier] <-
+  predict(Poids_entier_estimé, 
+         newdata = abalone_bis_2[cellules_vides_poids_entier, ])
+
+```
+
+-   Régression du poids écaillé
+
+```{r}
+
+Poids_écaillé_estimé <- lm( Poids_écaillé ~ Poids_entier + Poids_viscères +
+                              Poids_coquille, data = abalone_bis_2)
+
+summary(Poids_écaillé_estimé)
+
+cellules_vides_poids_écaillé <- which(is.na(abalone_bis_2$Poids_écaillé))
+
+abalone_bis_2$Poids_écaillé[cellules_vides_poids_écaillé] <-
+  predict(Poids_écaillé_estimé,                                                             newdata = abalone_bis_2[cellules_vides_poids_écaillé, ])
+
+```
+
+-   Régression du poids des viscères
+
+```{r}
+#| tbl-cap: Régression du poids des viscères
+
+Poids_viscères_estimé <- lm(Poids_viscères ~ Poids_entier + Poids_écaillé +
+                              Poids_coquille, data = abalone_bis_2)
+
+summary(Poids_viscères_estimé)
+
+cellules_vides_poids_viscères <- which(is.na(abalone_bis$Poids_viscères))
+
+abalone_bis_2$Poids_viscères[cellules_vides_poids_viscères] <-
+  predict(Poids_viscères_estimé, 
+         newdata = abalone_bis_2[cellules_vides_poids_viscères, ])
+```
+
+-   Régression du poids de la coquille
+
+```{r}
+
+Poids_coquille_estimé <- lm(Poids_coquille ~ Poids_entier + Poids_écaillé 
+                            + Poids_viscères, data = abalone_bis_2)
+
+summary(Poids_coquille_estimé)
+
+cellules_vides_poids_coquille <- which(is.na(abalone_bis_2$Poids_coquille))
+
+abalone_bis_2$Poids_coquille[cellules_vides_poids_coquille] <-
+  predict(Poids_coquille_estimé,                                                            newdata = abalone_bis_2[cellules_vides_poids_coquille, ])
+```
+
+Au vu de la qualité d'ajustement des 4 modèles obtenus mesurée par les R² et de la forte significativité des variables explicatives, nous avons retenu cette méthode pour effectuer les remplacements des valeurs manquantes des variables de poids. Aussi, nous avons attribué à chaque NA la valeur estimée par le modèle adapté.
+
+```{r}
+#| fig-cap: Représentation des valeurs manquantes après le second remplacement
+#| results: hide
+
+md.pattern(abalone_bis_2, rotate.names = TRUE)
+
+```
+
+Ce remplacement nous a donc permis de ne plus avoir de valeurs manquantes pour toutes les variables indiquant un poids. Désormais, il ne reste plus que 46 cellules ayant NA comme valeur.
+
+Une fois ce second remplacement ayant été réalisé, nous nous intéressons à sa qualité. Pour cela nous comparons une nouvelle fois les valeurs d'origines transformées en NA avec les estimations issues de notre remplacement.
+
+```{r}
+#| tbl-cap: Comparaison des valeurs obtenues à l'origine et après le second remplacement
+
+individus_manquants_poids <- individus_manquants |> 
+  filter (col %in% c(5:8)) |> 
+  rowwise() |>
+  mutate(
+    origine = sum(round(abalone[row, col], 2)),
+    remplacement = sum(round(abalone_bis_2[row, col], 2)),
+    différence = round(remplacement - origine,2),
+    différence_en_pourcentage = round((remplacement - origine)/origine * 100,0),
+    col = colnames(abalone[,col]))
+
+kable(individus_manquants_poids)
+```
+
+Nous observons que pour le poids entier, la méthode de remplacement choisie a été efficace dans la mesure où les différences observés sont au maximum de 11 % par rapport à la valeur réelle. Concernant, les poids des individus écaillés, le constat est similaire, hormis pour une valeur dans laquelle la différence observée est de 52 % mais qui peut être expliquée par un poids très faible et dont la variation se ressent très fortement. Par ailleurs, pour le poids des viscères il n'y a pas d'écart observé supérieur à 3 grammes entre la valeur d'origine et la valeur estimée : une nouvelle fois la méthode employée semble adaptée. Enfin, pour le poids des coquilles, bien que l'on observe des pourcentages de variation quelques peu supérieurs à ceux des variables précédentes, les valeurs estimées restent comparables aux valeurs initiales.
+
+De façon plus générale, bien que des variations existent, les remplacements issus des régressions linéaires conservent l'ordre de grandeur des poids. Aussi nous sommes satisfaites des résultats obtenus.
+
+## C. Troisième méthode : remplacement grâce à l'ACP
+
+Nous allons à présent procéder au remplacement des dernières valeurs manquantes présentes dans les colonnes des variables anneaux, diamètre et hauteur. Pour se faire, nous avons choisi d'utiliser une imputation multiple grâce à l'analyse en composante principale (ACP).
+
+Dans un premier temps, nous effectuons une ACP sans les valeurs manquantes et sans inclure la variable qualitative "sexe".
+
+```{r}
+abalone_bis_ACP <- abalone_bis_2 |>
+  drop_na()
+```
+
+```{r}
+#| fig-cap: ACP sans les valeurs manquantes
+
+acp <- abalone_bis_ACP |>
+  select(- Sexe) |>
+  PCA()
+
+```
+
+```{r}
+#| tbl-cap: Les valeurs propres et leur pourcentage de variance expliquée
+
+kable(acp$eig)
+```
+
+```{r}
+#| fig-cap: Pourcentage de variance expliquée selon les dimensions
+
+factoextra::fviz_screeplot(acp)
+
+```
+
+Au vu de ces graphique, nous avons décidé de focaliser notre travail sur les deux premières dimensions, celles-ci expliquant 94,09 % de la variabilité du modèle.
+
+```{r}
+acp_var_suppl <- PCA(
+  X = abalone_bis_ACP,
+  quali.sup = c(1),graph = FALSE
+)
+
+```
+
+```{r}
+#| fig-cap: Cercle de corrélation 
+plot.PCA(acp_var_suppl, choix = "var")
+
+```
+
+```{r}
+#| fig-cap: Projection des individus
+plot.PCA(acp_var_suppl, choix = "ind", label = "quali")
+
+```
+
+```{r}
+#| fig-cap: Projection des individus selon le sexe
+plot.PCA(acp_var_suppl, choix = "ind", habillage = "Sexe", label = "none")
+
+```
+
+De plus, en affichant le sexe des individus, nous observons que les nourissons sont regroupés d'un côté, tandis que les mâles et les femelles se trouvent de l'autre côté. Bien que les mâles et les femelles soient proches, une légère différence est perceptible, suggérant que l'imputation multiple par l'ACP est cohérente. Pour confirmer cela, nous réaliserons une MIPCA.
+
+```{r}
+abalone_bis_ACP_complete <- MIPCA(nboot = 50,
+                                  abalone_bis_2 |>
+                                    select(- Sexe))
+```
+
+```{r}
+#| fig-cap: Représentation des variables
+#| fig-width: 9
+#| fig-height: 9
+
+plot.MIPCA(abalone_bis_ACP_complete, choice = "var", main = "",new.plot = FALSE)
+```
+
+```{r}
+#| fig-cap: Projection des composantes principales
+
+plot.MIPCA(abalone_bis_ACP_complete, choice = "dim",main = "",new.plot = FALSE)
+```
+
+Le premier cercle de corrélation nous permet de visualiser la dispersion des différentes variables. Les points de couleurs ne varient quasiment pas, indiquant une faible dispersion lors des différentes itérations. Sur le deuxième cercle de corrélation, les deux flèches bleus, que ce soit pour l'axe 1 ou 2, coïncident fortement avec les axes. Ces deux cercles nous permettent d'affirmer que le modèle est très bien expliqué par nos variables sans une dispersion excessive. Ainsi, le remplacement des valeurs par l'imputation multiple est cohérent.
+
+```{r}
+abalone_bis_2 <-
+  bind_cols(
+    abalone_bis_2 |> select(Sexe),
+    abalone_bis_ACP_complete[["res.imputePCA"]]
+  )
+
+abalone_bis_2$Anneaux <- round(abalone_bis_2$Anneaux,0)
+```
+
+Nous avons remplacé les valeurs manquantes, mais pour les anneaux, nous avons dû arrondir le résultat car c'est une variable quantitative discrète. Nous vérifions une dernière fois si toutes nos données ont bien été remplacées.
+
+```{r}
+#| fig-cap: Représentation des valeurs manquantes après le troisième remplacement
+#| results: hide
+
+md.pattern(abalone_bis_2, rotate.names = TRUE)
+```
+
+```{r}
+#| tbl-cap: Comparaison des valeurs obtenues à l'origine et après le troisième remplacement
+
+individus_manquants_autres <- individus_manquants |> 
+  filter (col %in% c(3,4,9)) |> 
+  rowwise() |>
+  mutate(
+    origine = sum(round(abalone[row, col], 2)),
+    remplacement = sum(round(abalone_bis_2[row, col], 2)),
+    différence = round(remplacement - origine,2),
+    différence_en_pourcentage = ifelse(origine > 0,
+                                       round((remplacement - origine)/origine * 100,0),
+                                       NA), # on ne divise pas par 0
+    col = colnames(abalone[,col]) )
+
+kable(individus_manquants_autres)
+
+```
+
+Nous effectuons la comparaison des dernières valeurs remplacées avec les valeurs d'origine des trois variables (diamètre, hauteur et anneaux). Pour la variable diamètre, les différences varient de 0,78 à -0,27 centimètres, une différence minime bien que le pourcentage de différence puisse atteindre jusqu'à 14% en raison des faibles valeurs du diamètre.
+
+Pour la hauteur, nous remarquons deux grandes différences, -10,12 et -3 centimètres, qui correspondent aux valeurs aberrantes supprimées. Pour garantir la cohérence de ces remplacements, nous ne prendrons pas en considération ces deux valeurs. Ainsi, les différences vont de -0,27 à 0,95 centimètres avec un pourcentage de différence allant de -13% à 28%. Les différences sont faibles, bien que les pourcentages de différences soient élevés en raison des valeurs basse de la hauteur. Nous pouvons donc affirmer que le remplacement a été cohérent pour cette variable.
+
+Enfin, les différences de la variable anneaux se situent entre -5 et 3 anneaux. Cela nous permet de conclure que les différences sont globalement assez faibles, témoignant de la cohérence de la méthode utilisée.
+
+En résumé, pour les trois variables, le remplacement par imputation multiple grâce à l'ACP a été un succès.
+
+# 7. Conclusion
+
+Réaliser cette étude nous aura permis de découvrir et de mettre en pratique différentes méthodes de remplacement. Compte-tenu de la présence fréquente de valeurs manquantes dans les jeux de données sur lesquels nous sommes et seront amenées à travailler, nous avons apprécié en apprendre davantage sur ces processus. De plus dans le contexte de cette étude, nous avions la possibilité de comparer les valeurs obtenues avec les valeurs manquantes initiales et cela nous a permis d'évaluer la qualité de nos remplacements. Mais dans la réalité, cela ne se passe pas de la sorte. Aussi, cela nous a sensibilisé à l'importance que l'on doit donner à l'étude préalable de nos données afin de comprendre réellement les différentes relations qui existent entre les variables et selon leurs modalités.
